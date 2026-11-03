@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>FinPay – Transactions</title>
+<style>
+ body{font-family:system-ui;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}
+ input,select,button{padding:8px;width:100%;box-sizing:border-box}table{width:100%;border-collapse:collapse;margin-top:8px}
+ td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left}.field-error,.form-error,.page-error{color:#b00020;font-size:14px;margin-top:4px}
+ .success{background:#e7f6ec;border:1px solid #0a7d27;padding:10px;margin-top:12px}
+</style></head>
+<body>
+  <h1>Transactions</h1>
+  <div class="page-error" data-testid="page-error" hidden></div>
+  <p data-testid="account-summary"></p>
+
+  <h2>New transaction</h2>
+  <form id="tx-form" novalidate>
+    <label for="type">Type</label>
+    <select id="type" data-testid="type">
+      <option value="transfer">Transfer</option><option value="deposit">Deposit</option><option value="withdrawal">Withdrawal</option>
+    </select>
+
+    <label for="amount">Amount (USD)</label>
+    <input id="amount" data-testid="amount" inputmode="decimal" autocomplete="off">
+    <div class="field-error" data-testid="amount-error" hidden></div>
+
+    <div data-testid="recipient-group">
+      <label for="recipient">Recipient ID</label>
+      <input id="recipient" data-testid="recipient-id" autocomplete="off">
+      <div class="field-error" data-testid="recipient-error" hidden></div>
+    </div>
+
+    <button type="submit" data-testid="tx-submit" style="margin-top:18px">Submit</button>
+  </form>
+  <div class="form-error" data-testid="form-error" role="alert" hidden></div>
+  <div class="success" data-testid="transaction-success" hidden>Transaction completed</div>
+
+  <h2>History</h2>
+  <table><thead><tr><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+  <tbody data-testid="history"></tbody></table>
+  <p data-testid="history-empty" hidden>No transactions yet</p>
+
+<script>
+  const API = '/api', TOKEN = 'admin-token';
+  const userId = new URLSearchParams(location.search).get('userId');
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` };
+  const $ = (id) => document.querySelector(`[data-testid="${id}"]`);
+  const show = (id, msg) => { const el = $(id); el.textContent = msg || ''; el.hidden = !msg; };
+
+  function syncRecipient() { $('recipient-group').hidden = $('type').value !== 'transfer'; }
+  $('type').addEventListener('change', syncRecipient); syncRecipient();
+
+  const label = (t) => t.type === 'transfer' ? (t.userId === userId ? 'Transfer sent' : 'Transfer received')
+                     : t.type[0].toUpperCase() + t.type.slice(1);
+
+  async function loadHistory() {
+    const res = await fetch(`${API}/transactions/${encodeURIComponent(userId)}`, { headers });
+    const list = res.ok ? await res.json() : [];
+    $('history').innerHTML = list.map((t) => `<tr data-testid="history-row">
+      <td data-testid="row-type">${label(t)}</td><td data-testid="row-amount">$${t.amount.toFixed(2)}</td>
+      <td>${t.createdAt.slice(0, 10)}</td></tr>`).join('');
+    $('history-empty').hidden = list.length > 0;
+  }
+
+  async function init() {
+    if (!userId) { show('page-error', 'No user selected'); return; }
+    const res = await fetch(`${API}/users/${encodeURIComponent(userId)}`, { headers });
+    if (!res.ok) { show('page-error', 'User not found'); return; }
+    const u = await res.json();
+    $('account-summary').textContent = `${u.name} · ${u.accountType} account`;
+    await loadHistory();
+  }
+
+  document.getElementById('tx-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ['amount-error', 'recipient-error', 'form-error'].forEach((id) => show(id, ''));
+    $('transaction-success').hidden = true;
+
+    const type = $('type').value, raw = $('amount').value.trim(), recipientId = $('recipient-id').value.trim();
+    const amount = Number(raw);
+    let invalid = false;
+    if (!raw || !(amount > 0)) { show('amount-error', 'Enter an amount greater than 0'); invalid = true; }
+    if (type === 'transfer' && !recipientId) { show('recipient-error', 'Recipient ID is required for transfers'); invalid = true; }
+    if (invalid) return;
+
+    const payload = { userId, amount, type };
+    if (type === 'transfer') payload.recipientId = recipientId;
+    const res = await fetch(`${API}/transactions`, { method: 'POST', headers, body: JSON.stringify(payload) });
+    const body = await res.json();
+    if (!res.ok) { show('form-error', body.error.message); return; }
+
+    $('transaction-success').hidden = false;
+    document.getElementById('tx-form').reset(); syncRecipient();
+    await loadHistory();
+  });
+  init();
+</script>
+</body></html>

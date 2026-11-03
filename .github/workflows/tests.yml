@@ -1,0 +1,19 @@
+name: tests
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [local]   # add qa / staging once their URLs and secrets are configured
+    env:
+      TEST_ENV: ${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: pip }
+      - run: pip install -r requirements.txt && playwright install --with-deps chromium
+      - run: pytest -n 4 -m "smoke or regression"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: reports-${{ matrix.env }}, path: reports/ }

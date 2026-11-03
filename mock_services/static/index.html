@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>FinPay – Create account</title>
+<style>
+ body{font-family:system-ui;max-width:420px;margin:60px auto}label{display:block;margin:14px 0 4px}
+ input,select,button{width:100%;padding:8px;box-sizing:border-box}.field-error,.form-error{color:#b00020;font-size:14px;margin-top:4px}
+ .success{background:#e7f6ec;border:1px solid #0a7d27;padding:12px;margin-top:16px}
+</style></head>
+<body>
+  <h1>Create your account</h1>
+  <form id="register-form" novalidate>
+    <label for="name">Full name</label>
+    <input id="name" data-testid="name" autocomplete="off">
+    <div class="field-error" data-testid="name-error" hidden></div>
+
+    <label for="email">Email</label>
+    <input id="email" data-testid="email" autocomplete="off">
+    <div class="field-error" data-testid="email-error" hidden></div>
+
+    <label for="account-type">Account type</label>
+    <select id="account-type" data-testid="account-type">
+      <option value="basic">Basic</option><option value="premium">Premium</option><option value="business">Business</option>
+    </select>
+
+    <button type="submit" data-testid="register-submit" style="margin-top:18px">Create account</button>
+  </form>
+  <div class="form-error" data-testid="form-error" role="alert" hidden></div>
+
+  <section class="success" data-testid="registration-success" hidden>
+    <p>Account created for <strong data-testid="created-name"></strong> (<span data-testid="created-type"></span>)</p>
+    <p>User ID: <code data-testid="user-id"></code></p>
+    <a href="#" data-testid="go-to-transactions">Make a transaction</a>
+  </section>
+
+<script>
+  // The mock frontend talks to the gateway with a built-in service token.
+  const API = '/api', TOKEN = 'admin-token';
+  const $ = (id) => document.querySelector(`[data-testid="${id}"]`);
+  const show = (id, msg) => { const el = $(id); el.textContent = msg || ''; el.hidden = !msg; };
+
+  $('register-submit').closest('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ['name-error', 'email-error', 'form-error'].forEach((id) => show(id, ''));
+    $('registration-success').hidden = true;
+
+    const name = $('name').value.trim(), email = $('email').value.trim();
+    let invalid = false;
+    if (!name) { show('name-error', 'Name is required'); invalid = true; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { show('email-error', 'Enter a valid email address'); invalid = true; }
+    if (invalid) return;
+
+    const res = await fetch(`${API}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ name, email, accountType: $('account-type').value }),
+    });
+    const body = await res.json();
+    if (!res.ok) { show('form-error', body.error.message); return; }
+
+    $('created-name').textContent = body.name;
+    $('created-type').textContent = body.accountType;
+    $('user-id').textContent = body.id;
+    $('go-to-transactions').href = `/transactions.html?userId=${encodeURIComponent(body.id)}`;
+    $('registration-success').hidden = false;
+  });
+</script>
+</body></html>
